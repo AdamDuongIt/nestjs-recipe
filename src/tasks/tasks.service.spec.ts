@@ -8,6 +8,7 @@ const mockTasksRepository = () => ({
   getTasks: jest.fn(),
   findOne: jest.fn(),
   createTask: jest.fn(),
+  delete: jest.fn(),
 });
 
 const mockUser = {
@@ -85,8 +86,30 @@ describe('TasksService', () => {
   });
 
   describe('deleteTask', () => {
-    it.todo('calls TasksRepository.deleteTask and returns the result');
-    it.todo('calls TasksRepository.deleteTask and handles an error');
+    const mockTask = {
+      title: 'Test title',
+      description: 'Test desc',
+      id: 'someId',
+      status: TaskStatus.OPEN,
+    };
+
+    it('calls TasksRepository.deleteTask and returns the result', async () => {
+      tasksRepository.delete.mockResolvedValue({ affected: 1 });
+      tasksRepository.createTask.mockResolvedValue(mockTask);
+
+      const newTask = await tasksService.createTask(mockTask, mockUser);
+
+      await expect(
+        tasksService.deleteTask(newTask.id, mockUser),
+      ).resolves.not.toThrow();
+    });
+
+    it('calls TasksRepository.deleteTask and handles an error', async () => {
+      tasksRepository.delete.mockResolvedValue({ affected: 0 });
+      await expect(
+        tasksService.deleteTask(mockTask.id, mockUser),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('updateTaskStatus', () => {
