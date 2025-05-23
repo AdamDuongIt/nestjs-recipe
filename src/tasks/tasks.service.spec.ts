@@ -1,64 +1,55 @@
-import { NotFoundException } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { TaskStatus } from './task-status.enum';
+import { CreateTaskDto } from './dto/create-task.dto';
+import { GetTasksFilterDto } from './dto/get-tasks-filter.dto';
 import { TasksRepository } from './tasks.repository';
-import { TasksService } from './tasks.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Task } from './task.entity';
+import { User } from '../auth/user.entity';
 
-const mockTasksRepository = () => ({
-  getTasks: jest.fn(),
-  findOne: jest.fn(),
-});
+@Injectable()
+export class TasksService {
+  constructor(
+    @InjectRepository(TasksRepository)
+    private tasksRepository: TasksRepository,
+  ) {}
 
-const mockUser = {
-  username: 'Ariel',
-  id: 'someId',
-  password: 'somePassword',
-  tasks: [],
-};
+  getTasks(filterDto: GetTasksFilterDto, user: User): Promise<Task[]> {
+    return this.tasksRepository.getTasks(filterDto, user);
+  }
 
-describe('TasksService', () => {
-  let tasksService: TasksService;
-  let tasksRepository;
+  async getTaskById(id: string, user: User): Promise<Task> {
+    const found = await this.tasksRepository.findOne({ where: { id, user } });
 
-  beforeEach(async () => {
-    const module = await Test.createTestingModule({
-      providers: [
-        TasksService,
-        { provide: TasksRepository, useFactory: mockTasksRepository },
-      ],
-    }).compile();
+    if (!found) {
+      throw new NotFoundException(`Task with ID "${id}" not found`);
+    }
 
-    tasksService = module.get(TasksService);
-    tasksRepository = module.get(TasksRepository);
-  });
+    return found;
+  }
 
-  describe('getTasks', () => {
-    it('calls TasksRepository.getTasks and returns the result', async () => {
-      tasksRepository.getTasks.mockResolvedValue('someValue');
-      const result = await tasksService.getTasks(null, mockUser);
-      expect(result).toEqual('someValue');
-    });
-  });
+  createTask(createTaskDto: CreateTaskDto, user: User): Promise<Task> {
+    return this.tasksRepository.createTask(createTaskDto, user);
+  }
 
-  describe('getTaskById', () => {
-    it('calls TasksRepository.findOne and returns the result', async () => {
-      const mockTask = {
-        title: 'Test title',
-        description: 'Test desc',
-        id: 'someId',
-        status: TaskStatus.OPEN,
-      };
+  async deleteTask(id: string, user: User): Promise<void> {
+    const result = await this.tasksRepository.delete({ id, user });
 
-      tasksRepository.findOne.mockResolvedValue(mockTask);
-      const result = await tasksService.getTaskById('someId', mockUser);
-      expect(result).toEqual(mockTask);
-    });
+    if (result.affected === 0) {
+      throw new NotFoundException(`Task with ID "${id}" not found`);
+    }
+  }
 
-    it('calls TasksRepository.findOne and handles an error', async () => {
-      tasksRepository.findOne.mockResolvedValue(null);
-      expect(tasksService.getTaskById('someId', mockUser)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-  });
-});
+  async updateTaskStatus(
+    id: string,
+    status: TaskStatus,
+    user: User,
+  ): Promise<Task> {
+    const task = await this.getTaskById(id, user);
+
+    task.status = status;
+    await this.tasksRepository.save(task);
+
+    return task;
+  }
+}
