@@ -1,55 +1,96 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
 import { TaskStatus } from './task-status.enum';
-import { CreateTaskDto } from './dto/create-task.dto';
-import { GetTasksFilterDto } from './dto/get-tasks-filter.dto';
 import { TasksRepository } from './tasks.repository';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Task } from './task.entity';
-import { User } from '../auth/user.entity';
+import { TasksService } from './tasks.service';
 
-@Injectable()
-export class TasksService {
-  constructor(
-    @InjectRepository(TasksRepository)
-    private tasksRepository: TasksRepository,
-  ) {}
+const mockTasksRepository = () => ({
+  getTasks: jest.fn(),
+  findOne: jest.fn(),
+  createTask: jest.fn(),
+});
 
-  getTasks(filterDto: GetTasksFilterDto, user: User): Promise<Task[]> {
-    return this.tasksRepository.getTasks(filterDto, user);
-  }
+const mockUser = {
+  username: 'Ariel',
+  id: 'someId',
+  password: 'somePassword',
+  tasks: [],
+};
 
-  async getTaskById(id: string, user: User): Promise<Task> {
-    const found = await this.tasksRepository.findOne({ where: { id, user } });
+describe('TasksService', () => {
+  let tasksService: TasksService;
+  let tasksRepository;
 
-    if (!found) {
-      throw new NotFoundException(`Task with ID "${id}" not found`);
-    }
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        TasksService,
+        { provide: TasksRepository, useFactory: mockTasksRepository },
+      ],
+    }).compile();
 
-    return found;
-  }
+    tasksService = module.get(TasksService);
+    tasksRepository = module.get(TasksRepository);
+  });
 
-  createTask(createTaskDto: CreateTaskDto, user: User): Promise<Task> {
-    return this.tasksRepository.createTask(createTaskDto, user);
-  }
+  describe('getTasks', () => {
+    it('calls TasksRepository.getTasks and returns the result', async () => {
+      tasksRepository.getTasks.mockResolvedValue('someValue');
+      const result = await tasksService.getTasks(null, mockUser);
+      expect(result).toEqual('someValue');
+    });
+  });
 
-  async deleteTask(id: string, user: User): Promise<void> {
-    const result = await this.tasksRepository.delete({ id, user });
+  describe('getTaskById', () => {
+    it('calls TasksRepository.findOne and returns the result', async () => {
+      const mockTask = {
+        title: 'Test title',
+        description: 'Test desc',
+        id: 'someId',
+        status: TaskStatus.OPEN,
+      };
 
-    if (result.affected === 0) {
-      throw new NotFoundException(`Task with ID "${id}" not found`);
-    }
-  }
+      tasksRepository.findOne.mockResolvedValue(mockTask);
+      const result = await tasksService.getTaskById('someId', mockUser);
+      expect(result).toEqual(mockTask);
+    });
 
-  async updateTaskStatus(
-    id: string,
-    status: TaskStatus,
-    user: User,
-  ): Promise<Task> {
-    const task = await this.getTaskById(id, user);
+    it('calls TasksRepository.findOne and handles an error', async () => {
+      tasksRepository.findOne.mockResolvedValue(null);
+      expect(tasksService.getTaskById('someId', mockUser)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 
-    task.status = status;
-    await this.tasksRepository.save(task);
+  describe('createTask', () => {
+    it('calls TasksRepository.createTask and returns the result', async () => {
+      const mockTask = {
+        title: 'Test title',
+        description: 'Test desc',
+        id: 'someId',
+        status: TaskStatus.OPEN,
+      };
 
-    return task;
-  }
-}
+      tasksRepository.createTask.mockResolvedValue(mockTask);
+      tasksRepository.findOne.mockResolvedValue(mockTask);
+
+      const newTask = await tasksService.createTask(mockTask, mockUser);
+      const result = await tasksService.getTaskById(newTask.id, mockUser);
+
+      expect(result).toEqual(mockTask);
+    });
+
+    it.todo('calls TasksRepository.createTask and handles an error');
+  });
+
+  describe('deleteTask', () => {
+    it.todo('calls TasksRepository.deleteTask and returns the result');
+    it.todo('calls TasksRepository.deleteTask and handles an error');
+  });
+
+  describe('updateTaskStatus', () => {
+    it.todo('calls TasksRepository.updateTaskStatus and returns the result');
+    it.todo('calls TasksRepository.updateTaskStatus and handles an error');
+  });
+});
